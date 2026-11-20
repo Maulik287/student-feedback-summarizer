@@ -18,11 +18,11 @@ Tick these off as you go, and commit after each one.
       Hint: Focus on creating a small, well-structured dataset of input-output pairs.
 - [x] **2. Implement LoRA adapter injection and training on a pre-trained LLM (e.g., GPT-2).**  
       Hint: Apply the lfllm-lflora technique to inject and train the LoRA adapter on your chosen LLM.
-- [ ] **3. Develop a Streamlit UI to upload feedback and trigger summarization.**  
+- [x] **3. Develop a Streamlit UI to upload feedback and trigger summarization.**  
       Hint: Use Streamlit to build an intuitive web interface for interaction with your model.
-- [ ] **4. Evaluate the quality of generated summaries against original feedback.**  
+- [x] **4. Evaluate the quality of generated summaries against original feedback.**  
       Hint: Implement methods to compare the generated summaries against your original feedback for quality assessment.
-- [ ] **5. Implement adapter merging for inference.**  
+- [x] **5. Implement adapter merging for inference.**  
       Hint: Utilize the lfllm-lflora technique to merge the trained adapter weights into the base model for deployment.
 
 ## Run it
