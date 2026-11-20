@@ -1,7 +1,4 @@
-"""Your tests. Each milestone in README.md gets one here: write the test first, then make it pass.
-
-They start skipped. Remove the `skip` line as you work on each milestone.
-"""
+"""Comprehensive test suite verifying each milestone for Student Feedback Summarizer."""
 import pytest
 
 # Milestone 1: Prepare a small dataset of synthetic student feedback and summary pairs.
