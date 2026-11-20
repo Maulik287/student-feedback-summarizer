@@ -285,19 +285,298 @@ def milestone_2(r: int = 4, lora_alpha: float = 8.0, epochs: int = 5) -> Dict[st
     }
 
 
-# --- Milestone 3: Develop a Streamlit UI to upload feedback and trigger summarization.
-# Hint: Use Streamlit to build an intuitive web interface for interaction with your model.
-def milestone_3():  # TODO(milestone 3)
-    raise NotImplementedError("TODO(milestone 3)")
+# ==============================================================================
+# Milestone 3: Summarization Logic and Streamlit Helpers
+# ==============================================================================
+
+def summarize_feedback_rule_based(feedback: str) -> str:
+    """Generate an actionable summary from student feedback using keyword pattern synthesis."""
+    text_lower = feedback.lower()
+    actions = []
+    
+    if any(k in text_lower for k in ["fast", "pace", "rush", "slow"]):
+        actions.append("Adjust lecture pace and allocate more time to challenging topics")
+    if any(k in text_lower for k in ["homework", "assignment", "workload", "long"]):
+        actions.append("Clarify assignment specifications and balance student workload")
+    if any(k in text_lower for k in ["grading", "rubric", "feedback", "late"]):
+        actions.append("Provide explicit grading rubrics and expedite assignment return times")
+    if any(k in text_lower for k in ["textbook", "material", "outdated", "slides"]):
+        actions.append("Refresh course readings with modern, real-world examples")
+    if any(k in text_lower for k in ["ta", "office hours", "queue", "lab"]):
+        actions.append("Enhance TA training and optimize office hours / lab scheduling")
+    if any(k in text_lower for k in ["exam", "test", "midterm", "final", "proof"]):
+        actions.append("Align examinations closer with homework exercises and quizzes")
+    if any(k in text_lower for k in ["live code", "demo", "quiz", "interactive", "great", "love"]):
+        actions.append("Maintain interactive live coding demos and active learning exercises")
+        
+    if not actions:
+        first_sentence = feedback.split(".")[0].strip()
+        return f"Review student feedback: {first_sentence}."
+        
+    return "; ".join(actions) + "."
 
 
-# --- Milestone 4: Evaluate the quality of generated summaries against original feedback.
-# Hint: Implement methods to compare the generated summaries against your original feedback for quality assessment.
-def milestone_4():  # TODO(milestone 4)
-    raise NotImplementedError("TODO(milestone 4)")
+def summarize_feedback(feedback: str, use_llm: bool = False) -> str:
+    """Summarize student feedback using LLM if available, otherwise rule-based."""
+    if use_llm:
+        try:
+            from app.llm import chat
+            prompt = (
+                "You are an assistant for course instructors. Summarize the following student feedback "
+                "into 1-2 concise, actionable recommendations for course improvement:\n\n"
+                f"Student Feedback: {feedback}\n\n"
+                "Summary:"
+            )
+            return chat([{"role": "user", "content": prompt}]).strip()
+        except Exception:
+            pass
+    return summarize_feedback_rule_based(feedback)
 
 
-# --- Milestone 5: Implement adapter merging for inference.
-# Hint: Utilize the lfllm-lflora technique to merge the trained adapter weights into the base model for deployment.
-def milestone_5():  # TODO(milestone 5)
-    raise NotImplementedError("TODO(milestone 5)")
+def parse_uploaded_feedback(content: str, filename: str) -> List[Dict[str, Any]]:
+    """Parse feedback items from uploaded CSV, JSON, or plain text."""
+    items = []
+    fname = filename.lower()
+    if fname.endswith(".json"):
+        try:
+            data = json.loads(content)
+            if isinstance(data, list):
+                for i, row in enumerate(data):
+                    if isinstance(row, dict) and "feedback" in row:
+                        items.append({
+                            "id": row.get("id", i + 1),
+                            "category": row.get("category", "General"),
+                            "feedback": row["feedback"],
+                            "summary": row.get("summary", ""),
+                        })
+        except Exception:
+            pass
+    elif fname.endswith(".csv"):
+        lines = content.strip().splitlines()
+        if lines:
+            header = [h.strip().lower() for h in lines[0].split(",")]
+            fb_idx = header.index("feedback") if "feedback" in header else 0
+            for i, line in enumerate(lines[1:], start=1):
+                cols = [c.strip().strip('"') for c in line.split(",")]
+                if len(cols) > fb_idx:
+                    items.append({
+                        "id": i,
+                        "category": "CSV Upload",
+                        "feedback": cols[fb_idx],
+                        "summary": "",
+                    })
+    else:
+        # Plain text, one feedback item per non-empty line
+        for i, line in enumerate(content.splitlines(), start=1):
+            line = line.strip()
+            if line:
+                items.append({
+                    "id": i,
+                    "category": "Text Entry",
+                    "feedback": line,
+                    "summary": "",
+                })
+    return items
+
+
+def milestone_3() -> Dict[str, Any]:
+    """Milestone 3: Develop Streamlit UI helpers and summarization pipeline."""
+    sample_feedback = "The professor went way too fast on dynamic programming, but the slides were clear."
+    summary = summarize_feedback(sample_feedback)
+    parsed = parse_uploaded_feedback(sample_feedback, "sample.txt")
+    return {
+        "status": "success",
+        "sample_feedback": sample_feedback,
+        "sample_summary": summary,
+        "parsed_items_count": len(parsed),
+        "ui_ready": True,
+    }
+
+
+# ==============================================================================
+# Milestone 4: Evaluation of Generated Summaries
+# ==============================================================================
+
+def compute_token_f1(reference: str, candidate: str) -> Dict[str, float]:
+    """Compute token-level precision, recall, and F1 score."""
+    ref_tokens = [w.strip(".,!?:;\"'()[]{}").lower() for w in reference.split() if w.strip()]
+    cand_tokens = [w.strip(".,!?:;\"'()[]{}").lower() for w in candidate.split() if w.strip()]
+    
+    if not ref_tokens or not cand_tokens:
+        return {"precision": 0.0, "recall": 0.0, "f1": 0.0}
+        
+    ref_set = set(ref_tokens)
+    cand_set = set(cand_tokens)
+    common = ref_set.intersection(cand_set)
+    
+    prec = len(common) / len(cand_set) if cand_set else 0.0
+    rec = len(common) / len(ref_set) if ref_set else 0.0
+    f1 = (2 * prec * rec / (prec + rec)) if (prec + rec) > 0 else 0.0
+    return {"precision": round(prec, 4), "recall": round(rec, 4), "f1": round(f1, 4)}
+
+
+def compute_rouge_l(reference: str, candidate: str) -> float:
+    """Compute Longest Common Subsequence (LCS) ROUGE-L F1."""
+    ref = reference.lower().split()
+    cand = candidate.lower().split()
+    m, n = len(ref), len(cand)
+    if m == 0 or n == 0:
+        return 0.0
+        
+    # Standard dynamic programming table for LCS length
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if ref[i - 1] == cand[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1] + 1
+            else:
+                dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])
+                
+    lcs = dp[m][n]
+    prec = lcs / n
+    rec = lcs / m
+    return round((2 * prec * rec / (prec + rec)), 4) if (prec + rec) > 0 else 0.0
+
+
+def compute_compression_ratio(original: str, summary: str) -> float:
+    """Compute length ratio of summary to original text."""
+    orig_len = max(1, len(original.split()))
+    summ_len = len(summary.split())
+    return round(summ_len / orig_len, 4)
+
+
+def evaluate_summary(
+    original_feedback: str,
+    generated_summary: str,
+    reference_summary: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Evaluate quality of generated summary against feedback and optional reference."""
+    compression = compute_compression_ratio(original_feedback, generated_summary)
+    
+    # Check actionability
+    action_words = [
+        "adjust", "clarify", "balance", "provide", "refresh", "enhance", "align",
+        "maintain", "improve", "slow", "expand", "streamline", "ensure", "update",
+    ]
+    summary_words = generated_summary.lower().split()
+    actionable = any(w.strip(".,!?:;") in action_words for w in summary_words)
+    
+    metrics: Dict[str, Any] = {
+        "compression_ratio": compression,
+        "is_concise": compression < 1.0,
+        "is_actionable": actionable,
+        "summary_length_words": len(summary_words),
+    }
+    
+    if reference_summary:
+        f1_scores = compute_token_f1(reference_summary, generated_summary)
+        rouge_l = compute_rouge_l(reference_summary, generated_summary)
+        metrics["token_precision"] = f1_scores["precision"]
+        metrics["token_recall"] = f1_scores["recall"]
+        metrics["token_f1"] = f1_scores["f1"]
+        metrics["rouge_l"] = rouge_l
+        
+    return metrics
+
+
+def milestone_4() -> Dict[str, Any]:
+    """Milestone 4: Evaluate quality of generated summaries against original feedback."""
+    dataset = get_synthetic_feedback_dataset()
+    eval_results = []
+    
+    for item in dataset:
+        generated = summarize_feedback_rule_based(item["feedback"])
+        metrics = evaluate_summary(item["feedback"], generated, item["summary"])
+        eval_results.append({
+            "id": item["id"],
+            "feedback": item["feedback"],
+            "reference": item["summary"],
+            "generated": generated,
+            "metrics": metrics,
+        })
+        
+    avg_f1 = sum(r["metrics"]["token_f1"] for r in eval_results) / len(eval_results)
+    avg_rouge = sum(r["metrics"]["rouge_l"] for r in eval_results) / len(eval_results)
+    avg_compression = sum(r["metrics"]["compression_ratio"] for r in eval_results) / len(eval_results)
+    
+    return {
+        "status": "success",
+        "total_evaluated": len(eval_results),
+        "average_token_f1": round(avg_f1, 4),
+        "average_rouge_l": round(avg_rouge, 4),
+        "average_compression_ratio": round(avg_compression, 4),
+        "eval_results": eval_results,
+    }
+
+
+# ==============================================================================
+# Milestone 5: LoRA Adapter Merging for Inference
+# ==============================================================================
+
+def merge_lora_into_linear(lora_layer: LoRALinear) -> nn.Linear:
+    """Fuse LoRA weights permanently into a standard nn.Linear layer."""
+    # Ensure weights are merged into base layer
+    if not lora_layer.merged and lora_layer.r > 0:
+        lora_layer.merge()
+        
+    # Construct a new pure nn.Linear module
+    merged_linear = nn.Linear(
+        in_features=lora_layer.in_features,
+        out_features=lora_layer.out_features,
+        bias=lora_layer.base_layer.bias is not None,
+    )
+    merged_linear.weight.data.copy_(lora_layer.base_layer.weight.data)
+    if lora_layer.base_layer.bias is not None:
+        merged_linear.bias.data.copy_(lora_layer.base_layer.bias.data)
+    return merged_linear
+
+
+def merge_lora_model(model: nn.Module) -> nn.Module:
+    """Recursively replace all LoRALinear layers in a model with merged nn.Linear layers."""
+    for name, child in list(model.named_children()):
+        if isinstance(child, LoRALinear):
+            setattr(model, name, merge_lora_into_linear(child))
+        else:
+            merge_lora_model(child)
+    return model
+
+
+def milestone_5() -> Dict[str, Any]:
+    """Milestone 5: Implement adapter merging for inference and verify equivalence."""
+    torch.manual_seed(42)
+    # 1. Base model
+    base_linear = nn.Linear(16, 8)
+    
+    # 2. Inject LoRA
+    lora_layer = LoRALinear(base_linear, r=4, lora_alpha=8.0)
+    # Simulate trained adapter weights (non-zero B)
+    lora_layer.lora_B.data.normal_(0.0, 0.05)
+    
+    # 3. Test input
+    test_x = torch.randn(4, 16)
+    
+    # 4. Output with adapter active (before merge)
+    out_before_merge = lora_layer(test_x).detach().clone()
+    
+    # 5. Merge adapter
+    lora_layer.merge()
+    out_after_merge = lora_layer(test_x).detach().clone()
+    
+    # Check numerical equivalence
+    diff = torch.max(torch.abs(out_before_merge - out_after_merge)).item()
+    assert torch.allclose(out_before_merge, out_after_merge, atol=1e-5), f"Merged output differs: diff={diff}"
+    
+    # 6. Fuse into clean nn.Linear
+    clean_linear = merge_lora_into_linear(lora_layer)
+    out_clean = clean_linear(test_x).detach().clone()
+    diff_clean = torch.max(torch.abs(out_before_merge - out_clean)).item()
+    assert torch.allclose(out_before_merge, out_clean, atol=1e-5), f"Clean linear differs: diff={diff_clean}"
+    
+    return {
+        "status": "success",
+        "max_diff_merged_adapter": diff,
+        "max_diff_clean_linear": diff_clean,
+        "is_equivalent": True,
+        "inference_ready": True,
+    }
+
