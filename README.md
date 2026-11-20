@@ -14,7 +14,7 @@ This project develops a Student Feedback Summarizer, an EdTech tool designed for
 
 Tick these off as you go, and commit after each one.
 
-- [ ] **1. Prepare a small dataset of synthetic student feedback and summary pairs.**  
+- [x] **1. Prepare a small dataset of synthetic student feedback and summary pairs.**  
       Hint: Focus on creating a small, well-structured dataset of input-output pairs.
 - [ ] **2. Implement LoRA adapter injection and training on a pre-trained LLM (e.g., GPT-2).**  
       Hint: Apply the lfllm-lflora technique to inject and train the LoRA adapter on your chosen LLM.

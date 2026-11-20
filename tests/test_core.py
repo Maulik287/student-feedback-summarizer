@@ -5,9 +5,22 @@ They start skipped. Remove the `skip` line as you work on each milestone.
 import pytest
 
 # Milestone 1: Prepare a small dataset of synthetic student feedback and summary pairs.
-@pytest.mark.skip(reason="remove this line when you start milestone 1")
 def test_milestone_1():
-    raise NotImplementedError("write the test for milestone 1")
+    from app.core import milestone_1, get_synthetic_feedback_dataset, load_feedback_dataset
+    
+    result = milestone_1()
+    assert result["status"] == "success"
+    assert result["count"] >= 5
+    assert len(result["dataset"]) == result["count"]
+    
+    for item in result["dataset"]:
+        assert "feedback" in item and len(item["feedback"]) > 10
+        assert "summary" in item and len(item["summary"]) > 5
+        assert "category" in item
+        
+    loaded = load_feedback_dataset(result["saved_path"])
+    assert len(loaded) == result["count"]
+
 
 
 # Milestone 2: Implement LoRA adapter injection and training on a pre-trained LLM (e.g., GPT-2).
