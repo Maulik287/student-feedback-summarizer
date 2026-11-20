@@ -16,7 +16,7 @@ Tick these off as you go, and commit after each one.
 
 - [x] **1. Prepare a small dataset of synthetic student feedback and summary pairs.**  
       Hint: Focus on creating a small, well-structured dataset of input-output pairs.
-- [ ] **2. Implement LoRA adapter injection and training on a pre-trained LLM (e.g., GPT-2).**  
+- [x] **2. Implement LoRA adapter injection and training on a pre-trained LLM (e.g., GPT-2).**  
       Hint: Apply the lfllm-lflora technique to inject and train the LoRA adapter on your chosen LLM.
 - [ ] **3. Develop a Streamlit UI to upload feedback and trigger summarization.**  
       Hint: Use Streamlit to build an intuitive web interface for interaction with your model.
